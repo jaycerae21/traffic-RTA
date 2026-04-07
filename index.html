@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trapik · Intersection Control</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<audio id="audioHenshin" src="media/Henshin.mp3" loop></audio>
+<audio id="audioOOO" src="media/OOO.mp3" loop></audio>
+<style>
+:root {
+  --bg:       #0e0e0e;
+  --bg2:      #141414;
+  --bg3:      #1a1a1a;
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(255,255,255,0.12);
+  --border3:  rgba(255,255,255,0.18);
+
+  --red:      #ff3b3b;
+  --red-dim:  rgba(255,59,59,0.10);
+  --red-glow: rgba(255,59,59,0.35);
+  --yellow:   #ffc107;
+  --yellow-dim:rgba(255,193,7,0.10);
+  --yellow-glow:rgba(255,193,7,0.35);
+  --green:    #2ecc71;
+  --green-dim:rgba(46,204,113,0.10);
+  --green-glow:rgba(46,204,113,0.35);
+
+  --amber:    #ff9500;
+  --amber-dim:rgba(255,149,0,0.10);
+  --amber-glow:rgba(255,149,0,0.30);
+
+  --txt:      #e8e8e8;
+  --txt2:     #888;
+  --txt3:     #444;
+
+  --mono: 'Space Mono', monospace;
+  --sans: 'Syne', sans-serif;
+  --r: 4px;
+}
+
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:var(--sans);overflow:hidden;}
+
+/* ─── SCANLINES overlay ─── */
+body::before {
+  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.03) 2px,rgba(0,0,0,0.03) 4px);
+}
+
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* ─── TOP BAR ─── */
+.topbar {
+  height:52px;
+  background:var(--bg2);
+  border-bottom:1px solid var(--border2);
+  display:flex;align-items:center;
+  padding:0 24px;gap:0;
+  position:relative;z-index:10;flex-shrink:0;
+}
+.topbar-brand {
+  display:flex;align-items:center;gap:12px;
+  padding-right:24px;
+  border-right:1px solid var(--border);
+}
+.brand-icon {
+  width:32px;height:32px;
+  background:var(--amber-dim);
+  border:1px solid var(--amber-glow);
+  border-radius:var(--r);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+}
+.bi-dot{width:8px;height:8px;border-radius:50%;opacity:0.25;transition:opacity 0.3s,box-shadow 0.3s;}
+.bi-dot.r{background:var(--red);}
+.bi-dot.y{background:var(--yellow);}
+.bi-dot.g{background:var(--green);}
+.bi-dot.lit{opacity:1;}
+.bi-dot.lit.r{box-shadow:0 0 8px var(--red-glow);}
+.bi-dot.lit.y{box-shadow:0 0 8px var(--yellow-glow);}
+.bi-dot.lit.g{box-shadow:0 0 8px var(--green-glow);}
+
+.brand-name {
+  font-family:var(--sans);font-size:1.1rem;font-weight:800;
+  letter-spacing:4px;text-transform:uppercase;color:var(--txt);
+}
+.brand-name span{color:var(--amber);}
+
+.topbar-mid {
+  display:flex;align-items:center;gap:8px;
+  padding:0 24px;
+  border-right:1px solid var(--border);
+}
+.status-chip {
+  display:flex;align-items:center;gap:6px;
+  padding:4px 12px;
+  background:var(--bg3);
+  border:1px solid var(--border);
+  border-radius:2px;
+  font-family:var(--mono);font-size:0.5rem;
+  letter-spacing:0.5px;color:var(--txt2);
+  cursor:pointer;transition:all 0.2s;
+}
+.status-chip:hover{border-color:var(--border2);}
+.status-chip.ok{border-color:rgba(46,204,113,0.25);color:var(--green);}
+.status-chip.err{border-color:rgba(255,59,59,0.25);color:var(--red);}
+.status-chip.mus{border-color:rgba(255,193,7,0.25);color:var(--yellow);}
+.sc-dot{width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.eq{display:flex;align-items:flex-end;gap:2px;height:10px;}
+.eq span{width:2px;background:currentColor;height:30%;border-radius:1px;}
+.status-chip.mus .eq span:nth-child(1){animation:ea .5s ease-in-out infinite alternate;}
+.status-chip.mus .eq span:nth-child(2){animation:ea .4s ease-in-out infinite alternate .1s;}
+.status-chip.mus .eq span:nth-child(3){animation:ea .6s ease-in-out infinite alternate .05s;}
+.status-chip.mus .eq span:nth-child(4){animation:ea .45s ease-in-out infinite alternate .15s;}
+@keyframes ea{from{height:15%}to{height:95%}}
+
+.topbar-right {
+  margin-left:auto;
+  display:flex;align-items:center;gap:20px;
+}
+.mode-badge {
+  font-family:var(--mono);font-size:0.52rem;font-weight:700;
+  letter-spacing:3px;padding:5px 14px;
+  border-radius:2px;text-transform:uppercase;
+}
+.mode-badge.auto{background:var(--amber-dim);border:1px solid var(--amber-glow);color:var(--amber);}
+.mode-badge.manual{background:var(--yellow-dim);border:1px solid rgba(255,193,7,0.3);color:var(--yellow);}
+.tb-clock {
+  font-family:var(--mono);font-size:0.85rem;
+  color:var(--txt);letter-spacing:3px;
+  padding-left:20px;border-left:1px solid var(--border);
+}
+
+/* ─── MAIN LAYOUT ─── */
+.main {
+  flex:1;min-height:0;
+  display:grid;
+  grid-template-columns:1fr 260px 300px;
+  grid-template-rows:1fr;
+  overflow:hidden;
+}
+
+/* ─── LEFT PANEL (tables/controls) ─── */
+.panel-left {
+  background:var(--bg);
+  border-right:1px solid var(--border2);
+  display:flex;flex-direction:column;overflow:hidden;
+  position:relative;
+}
+.panel-left::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:
+    linear-gradient(var(--border) 1px,transparent 1px),
+    linear-gradient(90deg,var(--border) 1px,transparent 1px);
+  background-size:40px 40px;
+  mask-image:radial-gradient(ellipse 80% 60% at 50% 50%,black 40%,transparent 100%);
+  opacity:0.4;
+}
+
+.center-scroll{position:relative;z-index:1;flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
+
+/* Stat row */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;flex-shrink:0;}
+
+/* ─── TRAFFIC LIGHT STYLES (right panel) ─── */
+/* New horizontal traffic light */
+.tl-wrap {
+  display:flex;flex-direction:column;align-items:center;gap:0;
+}
+.tl-arm {
+  width:6px;height:28px;
+  background:linear-gradient(180deg,var(--bg3),var(--bg));
+  border:1px solid var(--border);
+  border-bottom:none;
+  border-radius:3px 3px 0 0;
+}
+.tl-body {
+  width:100px;
+  background:var(--bg3);
+  border:1px solid var(--border2);
+  border-radius:12px;
+  padding:16px 12px;
+  display:flex;flex-direction:column;gap:12px;align-items:center;
+  position:relative;
+  box-shadow:0 8px 40px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.tl-body::before {
+  content:'';position:absolute;inset:0;border-radius:12px;
+  background:linear-gradient(180deg,rgba(255,255,255,0.03) 0%,transparent 50%);
+  pointer-events:none;
+}
+.bulb {
+  width:64px;height:64px;border-radius:50%;
+  position:relative;transition:all 0.35s;
+  display:flex;align-items:center;justify-content:center;
+}
+.bulb::after {
+  content:'';position:absolute;top:9px;left:11px;
+  width:14px;height:9px;border-radius:50%;
+  background:rgba(255,255,255,0.08);transform:rotate(-25deg);
+}
+.bulb.r-off{background:#1a0606;border:1.5px solid #2a0a0a;}
+.bulb.y-off{background:#1a1300;border:1.5px solid #2a2000;}
+.bulb.g-off{background:#031208;border:1.5px solid #062014;}
+.bulb.r-on{background:radial-gradient(circle at 38% 32%,#ffaaaa,var(--red) 55%,#500);border:1.5px solid var(--red);box-shadow:0 0 28px var(--red-glow),0 0 70px rgba(255,59,59,0.15);}
+.bulb.y-on{background:radial-gradient(circle at 38% 32%,#ffe599,var(--yellow) 55%,#600);border:1.5px solid var(--yellow);box-shadow:0 0 28px var(--yellow-glow),0 0 70px rgba(255,193,7,0.15);animation:yflash .9s ease-in-out infinite;}
+.bulb.g-on{background:radial-gradient(circle at 38% 32%,#90ffb8,var(--green) 55%,#062014);border:1.5px solid var(--green);box-shadow:0 0 28px var(--green-glow),0 0 70px rgba(46,204,113,0.15);}
+@keyframes yflash{0%,100%{opacity:1}50%{opacity:0.3}}
+
+.tl-foot{width:52px;height:7px;background:var(--bg3);border:1px solid var(--border);border-top:none;border-radius:0 0 4px 4px;}
+
+.phase-display {
+  margin-top:24px;text-align:center;
+}
+.phase-word {
+  font-family:var(--sans);font-size:2.6rem;font-weight:800;
+  letter-spacing:4px;text-transform:uppercase;
+  line-height:1;transition:color 0.3s,text-shadow 0.3s;
+  color:var(--txt3);
+}
+.phase-word.r{color:var(--red);text-shadow:0 0 30px var(--red-glow);}
+.phase-word.y{color:var(--yellow);text-shadow:0 0 30px var(--yellow-glow);}
+.phase-word.g{color:var(--green);text-shadow:0 0 30px var(--green-glow);}
+.phase-sub{font-family:var(--mono);font-size:0.46rem;color:var(--txt3);letter-spacing:1.5px;text-transform:uppercase;margin-top:8px;}
+.phase-tag{
+  display:inline-flex;align-items:center;gap:5px;margin-top:12px;
+  padding:4px 14px;border-radius:2px;font-family:var(--mono);font-size:0.48rem;letter-spacing:1px;
+}
+.phase-tag.auto{background:var(--amber-dim);border:1px solid rgba(255,149,0,0.2);color:var(--amber);}
+.phase-tag.manual{background:var(--yellow-dim);border:1px solid rgba(255,193,7,0.2);color:var(--yellow);}
+.phase-tag-dot{width:4px;height:4px;border-radius:50%;background:currentColor;}
+
+/* Timer bar */
+.timer-zone {
+  padding:16px 20px;
+  border-top:1px solid var(--border);
+}
+.tz-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;}
+.tz-label{font-family:var(--mono);font-size:0.45rem;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);}
+.tz-val{font-family:var(--mono);font-size:1.6rem;font-weight:700;color:var(--txt3);letter-spacing:2px;transition:color 0.3s,text-shadow 0.3s;}
+.tz-val.r{color:var(--red);text-shadow:0 0 12px var(--red-glow);}
+.tz-val.y{color:var(--yellow);text-shadow:0 0 12px var(--yellow-glow);}
+.tz-val.g{color:var(--green);text-shadow:0 0 12px var(--green-glow);}
+.tz-track{height:2px;background:var(--bg3);border-radius:1px;overflow:hidden;}
+.tz-fill{height:100%;border-radius:1px;transition:width 0.9s linear,background 0.3s;background:var(--txt3);}
+.tz-fill.r{background:var(--red);box-shadow:0 0 6px var(--red-glow);}
+.tz-fill.y{background:var(--yellow);box-shadow:0 0 6px var(--yellow-glow);}
+.tz-fill.g{background:var(--green);box-shadow:0 0 6px var(--green-glow);}
+
+/* Pedestrian */
+.ped-zone{padding:14px 20px;border-top:1px solid var(--border);}
+.pz-label{font-family:var(--mono);font-size:0.45rem;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);margin-bottom:10px;}
+.ped-item{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;}
+.ped-item:last-child{margin-bottom:0;}
+.pi-left .pi-dir{font-family:var(--mono);font-size:0.42rem;color:var(--txt3);letter-spacing:1px;text-transform:uppercase;display:block;margin-bottom:2px;}
+.pi-left .pi-name{font-family:var(--sans);font-size:0.75rem;font-weight:600;color:var(--txt2);}
+.ped-tag{display:flex;align-items:center;gap:4px;padding:3px 10px;border-radius:2px;font-family:var(--mono);font-size:0.48rem;font-weight:700;letter-spacing:0.5px;}
+.ped-tag.walk{background:var(--green-dim);border:1px solid rgba(46,204,113,0.2);color:var(--green);}
+.ped-tag.wait{background:var(--red-dim);border:1px solid rgba(255,59,59,0.2);color:var(--red);}
+.ped-tag .ptdot{width:4px;height:4px;border-radius:50%;background:currentColor;}
+.ped-tag.wait .ptdot{animation:yflash .7s ease-in-out infinite;}
+
+/* GPIO */
+.gpio-zone{padding:14px 20px;border-top:1px solid var(--border);}
+.gz-label{font-family:var(--mono);font-size:0.45rem;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);margin-bottom:8px;}
+.gpio-item{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);}
+.gpio-item:last-child{border-bottom:none;}
+.gi-stripe{width:12px;height:3px;border-radius:2px;flex-shrink:0;}
+.gi-pin{font-family:var(--mono);font-size:0.55rem;font-weight:700;color:var(--txt);min-width:52px;}
+.gi-desc{font-family:var(--mono);font-size:0.46rem;color:var(--txt3);}
+
+/* ─── CENTER PANEL (logs/status) ─── */
+.panel-center {
+  display:flex;flex-direction:column;overflow:hidden;
+  background:var(--bg2);
+  border-right:1px solid var(--border2);
+}
+.status-list{border-bottom:1px solid var(--border);}
+.sl-row{display:flex;align-items:center;justify-content:space-between;padding:7px 18px;border-bottom:1px solid rgba(255,255,255,0.03);transition:background 0.15s;}
+.sl-row:hover{background:rgba(255,255,255,0.02);}
+.sl-row:last-child{border-bottom:none;}
+.sl-key{font-family:var(--mono);font-size:0.48rem;letter-spacing:1px;text-transform:uppercase;color:var(--txt3);}
+.sl-val{font-family:var(--mono);font-size:0.56rem;font-weight:700;color:var(--txt2);}
+.sl-val.r{color:var(--red);}.sl-val.g{color:var(--green);}.sl-val.a{color:var(--amber);}.sl-val.y{color:var(--yellow);}
+
+.log-section{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden;}
+.log-body{flex:1;overflow-y:auto;padding:4px 0;}
+.log-row{display:flex;align-items:flex-start;gap:8px;padding:5px 18px;border-bottom:1px solid rgba(255,255,255,0.02);animation:lfade .2s ease;}
+@keyframes lfade{from{opacity:0;transform:translateY(-2px)}to{opacity:1;transform:translateY(0)}}
+.lr-time{font-family:var(--mono);font-size:0.44rem;color:var(--txt3);white-space:nowrap;padding-top:2px;flex-shrink:0;}
+.lr-bar{width:2px;min-height:14px;flex-shrink:0;margin-top:2px;border-radius:1px;}
+.lr-msg{font-family:var(--mono);font-size:0.5rem;color:var(--txt2);line-height:1.6;}
+.log2-section{flex:0.5;display:flex;flex-direction:column;min-height:0;overflow:hidden;border-top:1px solid var(--border);}
+.scard{
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:16px 16px 14px;
+  position:relative;overflow:hidden;
+  transition:border-color 0.2s;
+}
+.scard:hover{border-color:var(--border2);}
+.scard::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:var(--border);transition:background 0.3s;
+}
+.scard-lbl{font-family:var(--mono);font-size:0.44rem;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:8px;}
+.scard-val{font-family:var(--sans);font-size:1.7rem;font-weight:800;letter-spacing:1px;line-height:1;color:var(--txt2);transition:color 0.3s,text-shadow 0.3s;}
+.scard-val.r{color:var(--red);text-shadow:0 0 16px var(--red-glow);}
+.scard-val.y{color:var(--yellow);text-shadow:0 0 16px var(--yellow-glow);}
+.scard-val.g{color:var(--green);text-shadow:0 0 16px var(--green-glow);}
+.scard-val.a{color:var(--amber);}
+
+/* Mode + Override */
+.ctrl-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.cbox{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.cbox-hd{padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.cbox-title{font-family:var(--mono);font-size:0.48rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);}
+.cbox-badge{font-family:var(--mono);font-size:0.44rem;font-weight:700;letter-spacing:1.5px;padding:2px 8px;border-radius:2px;text-transform:uppercase;}
+.cbox-badge.auto{background:var(--amber-dim);border:1px solid rgba(255,149,0,0.25);color:var(--amber);}
+.cbox-badge.manual{background:var(--yellow-dim);border:1px solid rgba(255,193,7,0.25);color:var(--yellow);}
+.cbox-body{padding:14px 16px;}
+
+.mode-toggle{display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.mbt{flex:1;padding:9px;border:none;background:transparent;font-family:var(--sans);font-size:0.78rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;color:var(--txt3);transition:all 0.2s;}
+.mbt:hover{color:var(--txt2);}
+.mbt.active-auto{background:var(--amber-dim);color:var(--amber);border-right:1px solid rgba(255,149,0,0.2);}
+.mbt.active-manual{background:var(--yellow-dim);color:var(--yellow);}
+
+/* Signal Override buttons */
+.sig-override{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.sob{
+  display:flex;flex-direction:column;align-items:center;gap:7px;
+  padding:12px 8px;border-radius:var(--r);
+  border:1px solid var(--border);
+  background:var(--bg3);cursor:pointer;
+  transition:all 0.2s;font-family:var(--sans);
+}
+.sob:disabled{opacity:0.2;pointer-events:none;}
+.sob:not(:disabled):hover{border-color:var(--border2);}
+.sob-circle{width:12px;height:12px;border-radius:50%;transition:all 0.2s;}
+.sob-lbl{font-size:0.72rem;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);}
+.sob-hint{font-family:var(--mono);font-size:0.42rem;color:var(--txt3);letter-spacing:0.5px;}
+.sob-override-note{font-family:var(--mono);font-size:0.44rem;color:var(--txt3);}
+
+/* Red */
+.sob.red .sob-circle{background:var(--red-dim);border:1.5px solid rgba(255,59,59,0.3);}
+.sob.red:not(:disabled):hover .sob-circle,.sob.red.sel .sob-circle{background:var(--red);box-shadow:0 0 12px var(--red-glow);}
+.sob.red:not(:disabled):hover,.sob.red.sel{border-color:rgba(255,59,59,0.4);background:var(--red-dim);color:var(--red);}
+.sob.red.sel .sob-lbl,.sob.red:not(:disabled):hover .sob-lbl{color:var(--red);}
+/* Yellow */
+.sob.yellow .sob-circle{background:var(--yellow-dim);border:1.5px solid rgba(255,193,7,0.3);}
+.sob.yellow:not(:disabled):hover .sob-circle,.sob.yellow.sel .sob-circle{background:var(--yellow);box-shadow:0 0 12px var(--yellow-glow);}
+.sob.yellow:not(:disabled):hover,.sob.yellow.sel{border-color:rgba(255,193,7,0.4);background:var(--yellow-dim);}
+.sob.yellow.sel .sob-lbl,.sob.yellow:not(:disabled):hover .sob-lbl{color:var(--yellow);}
+/* Green */
+.sob.green .sob-circle{background:var(--green-dim);border:1.5px solid rgba(46,204,113,0.3);}
+.sob.green:not(:disabled):hover .sob-circle,.sob.green.sel .sob-circle{background:var(--green);box-shadow:0 0 12px var(--green-glow);}
+.sob.green:not(:disabled):hover,.sob.green.sel{border-color:rgba(46,204,113,0.4);background:var(--green-dim);}
+.sob.green.sel .sob-lbl,.sob.green:not(:disabled):hover .sob-lbl{color:var(--green);}
+
+/* Duration table */
+.dur-table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.dur-table{width:100%;border-collapse:collapse;}
+.dur-table thead th{
+  padding:9px 16px;background:var(--bg3);border-bottom:1px solid var(--border);
+  font-family:var(--mono);font-size:0.46rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);
+  text-align:left;
+}
+.dur-table tbody tr{border-bottom:1px solid var(--border);transition:background 0.15s;}
+.dur-table tbody tr:last-child{border-bottom:none;}
+.dur-table tbody tr:hover{background:rgba(255,255,255,0.02);}
+.dur-table td{padding:10px 16px;font-family:var(--mono);font-size:0.6rem;color:var(--txt);vertical-align:middle;}
+
+.ph-swatch{display:inline-flex;align-items:center;gap:9px;font-family:var(--sans);font-size:0.78rem;font-weight:700;letter-spacing:1px;}
+.ph-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.ph-tag{font-family:var(--mono);font-size:0.44rem;font-weight:700;letter-spacing:1px;padding:2px 8px;border-radius:2px;text-transform:uppercase;}
+.ph-tag.r{background:var(--red-dim);color:var(--red);border:1px solid rgba(255,59,59,0.2);}
+.ph-tag.y{background:var(--yellow-dim);color:var(--yellow);border:1px solid rgba(255,193,7,0.2);}
+.ph-tag.g{background:var(--green-dim);color:var(--green);border:1px solid rgba(46,204,113,0.2);}
+.dur-input{
+  width:68px;padding:5px 10px;
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+  font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--txt);text-align:center;
+  transition:border-color 0.2s;
+}
+.dur-input:focus{outline:none;border-color:var(--amber-glow);box-shadow:0 0 0 2px var(--amber-dim);}
+.dur-input:disabled{opacity:0.2;}
+.td-note{color:var(--txt3);font-size:0.5rem;}
+
+.dur-footer{display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);background:var(--bg3);}
+.btn-apply{flex:1;padding:8px;background:var(--amber-dim);border:1px solid rgba(255,149,0,0.35);border-radius:var(--r);font-family:var(--sans);font-size:0.75rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--amber);cursor:pointer;transition:all 0.2s;}
+.btn-apply:hover{background:rgba(255,149,0,0.2);border-color:var(--amber-glow);}
+.btn-apply:disabled{opacity:0.2;pointer-events:none;}
+.btn-stop{padding:8px 16px;background:transparent;border:1px solid var(--border);border-radius:var(--r);font-family:var(--sans);font-size:0.73rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);cursor:pointer;transition:all 0.2s;}
+.btn-stop:hover{border-color:rgba(255,59,59,0.4);color:var(--red);}
+.btn-stop:disabled{opacity:0.2;pointer-events:none;}
+
+/* System info */
+.sysinfo-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.si-cell{padding:10px 16px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+.si-cell:nth-child(even){border-right:none;}
+.si-cell:nth-last-child(-n+2){border-bottom:none;}
+.si-k{font-family:var(--mono);font-size:0.44rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);display:block;margin-bottom:3px;}
+.si-v{font-family:var(--mono);font-size:0.6rem;font-weight:700;color:var(--txt2);}
+.si-v.r{color:var(--red);}.si-v.g{color:var(--green);}.si-v.a{color:var(--amber);}.si-v.y{color:var(--yellow);}
+
+/* Direction Queue */
+.dir-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
+.dir-box-hd{padding:8px 16px;background:var(--bg3);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:0.48rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--txt3);}
+.dir-grid{display:grid;grid-template-columns:1fr 1fr;}
+.dir-cell{padding:12px 16px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+.dir-cell:nth-child(even){border-right:none;}
+.dir-cell:nth-last-child(-n+2){border-bottom:none;}
+.dir-arrow{font-family:var(--mono);font-size:0.44rem;letter-spacing:1px;color:var(--txt3);text-transform:uppercase;display:block;margin-bottom:4px;}
+.dir-num{font-family:var(--sans);font-size:1.2rem;font-weight:800;color:var(--txt3);}
+
+/* ─── CENTER PANEL shared heading styles ─── */
+.pr-section{flex-shrink:0;}
+.pr-hd{padding:10px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.pr-hd-title{font-family:var(--mono);font-size:0.46rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--txt3);}
+
+/* ─── RIGHT PANEL (traffic light) ─── */
+.panel-right{
+  background:var(--bg2);
+  border-left:1px solid var(--border2);
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.pr-signal-zone{
+  flex:1;min-height:260px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:30px 24px 20px;
+  border-bottom:1px solid var(--border);
+  position:relative;
+}
+.pr-signal-zone::before{
+  content:'LIVE';position:absolute;top:12px;right:14px;
+  font-family:var(--mono);font-size:0.42rem;font-weight:700;letter-spacing:2px;
+  color:var(--txt3);
+}
+.live-dot{
+  position:absolute;top:14px;right:46px;
+  width:5px;height:5px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 6px var(--green-glow);
+  animation:livepulse 1.5s ease-in-out infinite;
+}
+@keyframes livepulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+.dis{opacity:0.2;pointer-events:none;}
+</style>
+</head>
+<body style="display:flex;flex-direction:column;height:100vh;">
+
+<!-- ─── TOPBAR ─── -->
+<header class="topbar">
+  <div class="topbar-brand">
+    <div class="brand-icon">
+      <div class="bi-dot r" id="bmR"></div>
+      <div class="bi-dot y" id="bmY"></div>
+      <div class="bi-dot g" id="bmG"></div>
+    </div>
+    <div class="brand-name">Tra<span>ffic rta sa unahan boss</span></div>
+  </div>
+  <div class="topbar-mid">
+    <button class="status-chip" id="sbPill"><div class="sc-dot"></div><span id="sbTxt">Connecting</span></button>
+    <button class="status-chip" id="espPill"><div class="sc-dot"></div><span id="espTxt">ESP32</span></button>
+    <button class="status-chip" id="musicPill" onclick="toggleMusic()">
+      <div class="eq"><span></span><span></span><span></span><span></span></div>
+      <span id="musicTxt">BGM</span>
+    </button>
+  </div>
+  <div class="topbar-right">
+    <div class="mode-badge auto" id="hdrModeBadge">AUTO</div>
+    <div class="tb-clock" id="clock">00:00:00</div>
+  </div>
+</header>
+
+<!-- ─── MAIN ─── -->
+<div class="main">
+
+  <!-- LEFT PANEL: Tables + Controls -->
+  <div class="panel-left">
+    <div class="center-scroll">
+
+      <!-- Stat row -->
+      <div class="stat-row">
+        <div class="scard">
+          <span class="scard-lbl">Current Signal</span>
+          <div class="scard-val" id="svSig">--</div>
+        </div>
+        <div class="scard">
+          <span class="scard-lbl">Total Cycles</span>
+          <div class="scard-val a" id="svCycles">0</div>
+        </div>
+        <div class="scard">
+          <span class="scard-lbl">Uptime</span>
+          <div class="scard-val a" id="svUptime">--:--</div>
+        </div>
+        <div class="scard">
+          <span class="scard-lbl">Mode</span>
+          <div class="scard-val a" id="svMode">--</div>
+        </div>
+      </div>
+
+      <!-- Mode + Override -->
+      <div class="ctrl-row">
+        <div class="cbox">
+          <div class="cbox-hd">
+            <span class="cbox-title">Operating Mode</span>
+            <span class="cbox-badge auto" id="modeBadge">AUTO</span>
+          </div>
+          <div class="cbox-body">
+            <div class="mode-toggle">
+              <button class="mbt" id="manBtn" onclick="setMode('manual')">Manual</button>
+              <button class="mbt active-auto" id="autoBtn" onclick="setMode('auto')">Auto</button>
+            </div>
+          </div>
+        </div>
+        <div class="cbox">
+          <div class="cbox-hd">
+            <span class="cbox-title">Signal Override</span>
+            <span id="overrideTxt" style="font-family:var(--mono);font-size:0.44rem;color:var(--txt3);">Manual mode only</span>
+          </div>
+          <div class="cbox-body" style="padding:12px 16px;">
+            <div class="sig-override">
+              <button class="sob red dis" id="cbR" onclick="manualSet('red')">
+                <div class="sob-circle"></div>
+                <span class="sob-lbl">Red</span>
+                <span class="sob-hint">Stop</span>
+              </button>
+              <button class="sob yellow dis" id="cbY" onclick="manualSet('yellow')">
+                <div class="sob-circle"></div>
+                <span class="sob-lbl">Yellow</span>
+                <span class="sob-hint">Caution</span>
+              </button>
+              <button class="sob green dis" id="cbG" onclick="manualSet('green')">
+                <div class="sob-circle"></div>
+                <span class="sob-lbl">Green</span>
+                <span class="sob-hint">Go</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Duration Table -->
+      <div class="dur-table-wrap">
+        <table class="dur-table">
+          <thead>
+            <tr><th>Phase</th><th>Status</th><th>Duration (sec)</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="ph-swatch"><span class="ph-dot" style="background:var(--red)"></span>Red</span></td>
+              <td><span class="ph-tag r">STOP</span></td>
+              <td><input type="number" class="dur-input" id="dR" value="30" min="1" max="999" onchange="pushDurations()"></td>
+              <td class="td-note">All vehicles halt · Pedestrians walk</td>
+            </tr>
+            <tr>
+              <td><span class="ph-swatch"><span class="ph-dot" style="background:var(--yellow)"></span>Yellow</span></td>
+              <td><span class="ph-tag y">CAUTION</span></td>
+              <td><input type="number" class="dur-input" id="dY" value="5" min="1" max="999" onchange="pushDurations()"></td>
+              <td class="td-note">Prepare to stop · Transition phase</td>
+            </tr>
+            <tr>
+              <td><span class="ph-swatch"><span class="ph-dot" style="background:var(--green)"></span>Green</span></td>
+              <td><span class="ph-tag g">GO</span></td>
+              <td><input type="number" class="dur-input" id="dG" value="25" min="1" max="999" onchange="pushDurations()"></td>
+              <td class="td-note">Traffic flows · Pedestrians wait</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="dur-footer">
+          <button class="btn-apply" id="applyBtn" onclick="pushDurations()">▶ Apply &amp; Start Cycle</button>
+          <button class="btn-stop" id="stopBtn" onclick="stopCycle()">■ Stop</button>
+        </div>
+      </div>
+
+      <!-- System Info -->
+      <div class="sysinfo-grid">
+        <div class="si-cell"><span class="si-k">ESP32 Status</span><span class="si-v r" id="svEsp">Offline</span></div>
+        <div class="si-cell"><span class="si-k">ESP32 IP</span><span class="si-v a" id="svIP">--</span></div>
+        <div class="si-cell"><span class="si-k">Connection</span><span class="si-v" id="svConn">--</span></div>
+        <div class="si-cell"><span class="si-k">Sim Mode</span><span class="si-v y" id="svSimMode">ESP32 Offline</span></div>
+      </div>
+
+      <!-- Direction Queue -->
+      <div class="dir-box">
+        <div class="dir-box-hd">Direction Queue</div>
+        <div class="dir-grid">
+          <div class="dir-cell"><span class="dir-arrow">▲ North</span><span class="dir-num" id="dN">--</span></div>
+          <div class="dir-cell"><span class="dir-arrow">▼ South</span><span class="dir-num" id="dS">--</span></div>
+          <div class="dir-cell"><span class="dir-arrow">◄ West</span><span class="dir-num" id="dW">--</span></div>
+          <div class="dir-cell"><span class="dir-arrow">► East</span><span class="dir-num" id="dE">--</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- CENTER PANEL: Logs + Status -->
+  <div class="panel-center">
+    <div class="pr-section">
+      <div class="pr-hd"><span class="pr-hd-title">System Status</span></div>
+    </div>
+    <div class="status-list">
+      <div class="sl-row"><span class="sl-key">Supabase</span><span class="sl-val" id="rcConn">--</span></div>
+      <div class="sl-row"><span class="sl-key">ESP32</span><span class="sl-val r" id="rcEsp">Offline</span></div>
+      <div class="sl-row"><span class="sl-key">IP Address</span><span class="sl-val a" id="rcIP">--</span></div>
+      <div class="sl-row"><span class="sl-key">Uptime</span><span class="sl-val a" id="rcUptime">--:--</span></div>
+      <div class="sl-row"><span class="sl-key">Sim Mode</span><span class="sl-val y" id="rcSimMode">ESP32 Offline</span></div>
+      <div class="sl-row"><span class="sl-key">Current Mode</span><span class="sl-val a" id="rcMode">AUTO</span></div>
+      <div class="sl-row"><span class="sl-key">Signal</span><span class="sl-val" id="rcSig">---</span></div>
+      <div class="sl-row"><span class="sl-key">Cycles</span><span class="sl-val a" id="rcCycles">0</span></div>
+    </div>
+
+    <div class="pr-section">
+      <div class="pr-hd"><span class="pr-hd-title">Event Log</span></div>
+    </div>
+    <div class="log-section">
+      <div class="log-body" id="logBody"></div>
+    </div>
+
+    <div class="log2-section">
+      <div class="pr-hd" style="flex-shrink:0;border-bottom:1px solid var(--border);"><span class="pr-hd-title">System Log</span></div>
+      <div class="log-body" id="logBody2"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL: Traffic Light + Signal -->
+  <div class="panel-right">
+
+    <div class="pr-signal-zone">
+      <div class="live-dot"></div>
+      <div class="tl-wrap">
+        <div class="tl-arm"></div>
+        <div class="tl-body">
+          <div class="bulb r-off" id="tlR"></div>
+          <div class="bulb y-off" id="tlY"></div>
+          <div class="bulb g-off" id="tlG"></div>
+        </div>
+        <div class="tl-foot"></div>
+      </div>
+      <div class="phase-display">
+        <div class="phase-word" id="siMain">---</div>
+        <div class="phase-sub" id="siSub">Waiting for signal</div>
+        <div class="phase-tag auto" id="modeTag">
+          <div class="phase-tag-dot"></div>
+          <span id="modeLabelTxt">Auto Cycle</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="timer-zone">
+      <div class="tz-top">
+        <span class="tz-label">Phase Timer</span>
+        <span class="tz-val" id="timerVal">--</span>
+      </div>
+      <div class="tz-track">
+        <div class="tz-fill" id="timerFill" style="width:100%"></div>
+      </div>
+    </div>
+
+    <div class="ped-zone">
+      <div class="pz-label">Pedestrian Crossing</div>
+      <div class="ped-item">
+        <div class="pi-left">
+          <span class="pi-dir">N / S Crossing</span>
+          <span class="pi-name">Pedestrian</span>
+        </div>
+        <div class="ped-tag wait" id="pedNS"><div class="ptdot"></div><span id="pedNSTxt">Wait</span></div>
+      </div>
+      <div class="ped-item">
+        <div class="pi-left">
+          <span class="pi-dir">E / W Crossing</span>
+          <span class="pi-name">Pedestrian</span>
+        </div>
+        <div class="ped-tag wait" id="pedEW"><div class="ptdot"></div><span id="pedEWTxt">Wait</span></div>
+      </div>
+    </div>
+
+    <div class="gpio-zone">
+      <div class="gz-label">GPIO Wiring</div>
+      <div class="gpio-item"><div class="gi-stripe" style="background:var(--red)"></div><span class="gi-pin">GPIO 25</span><span class="gi-desc">RED → 220Ω → GND</span></div>
+      <div class="gpio-item"><div class="gi-stripe" style="background:var(--yellow)"></div><span class="gi-pin">GPIO 26</span><span class="gi-desc">YEL → 220Ω → GND</span></div>
+      <div class="gpio-item"><div class="gi-stripe" style="background:var(--green)"></div><span class="gi-pin">GPIO 27</span><span class="gi-desc">GRN → 220Ω → GND</span></div>
+      <div class="gpio-item"><div class="gi-stripe" style="background:var(--txt3)"></div><span class="gi-pin">GND</span><span class="gi-desc">Common ground</span></div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+const SURL='https://dbmquedtshlknzicpzva.supabase.co';
+const SKEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRibXF1ZWR0c2hsa256aWNwenZhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MTk0OTMsImV4cCI6MjA5MDQ5NTQ5M30.Vg5QbtlTAZ31cN8nJouqJmXaGgBbzYN7_TJIIw5vr6Y';
+const{createClient}=supabase;
+const sb=createClient(SURL,SKEY);
+
+async function sbPatch(f){const{error}=await sb.from('traffic_light').upsert({id:1,...f},{onConflict:'id'});if(error)console.error(error.message);}
+async function sbGet(){const{data,error}=await sb.from('traffic_light').select('*').eq('id',1).single();if(error){console.error(error.message);return null;}return data;}
+
+let sig='red',mode='auto',cycles=0,prevSig='',prevMode='';
+let dispTimer=null,dispMax=30,dispLeft=30;
+
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8);},1000);
+
+function setActive(color){
+  document.getElementById('tlR').className='bulb '+(color==='red'?'r-on':'r-off');
+  document.getElementById('tlY').className='bulb '+(color==='yellow'?'y-on':'y-off');
+  document.getElementById('tlG').className='bulb '+(color==='green'?'g-on':'g-off');
+  document.getElementById('bmR').className='bi-dot r'+(color==='red'?' lit':'');
+  document.getElementById('bmY').className='bi-dot y'+(color==='yellow'?' lit':'');
+  document.getElementById('bmG').className='bi-dot g'+(color==='green'?' lit':'');
+
+  const cls={red:'r',yellow:'y',green:'g'}[color];
+  const ph=document.getElementById('siMain');
+  ph.textContent=color.toUpperCase();ph.className='phase-word '+cls;
+  document.getElementById('siSub').textContent={red:'All Stop · Hold Position',yellow:'Caution · Prepare to Stop',green:'Clear · Traffic Flowing'}[color];
+
+  const sv=document.getElementById('svSig');sv.textContent=color.toUpperCase();sv.className='scard-val '+cls;
+  const rc=document.getElementById('rcSig');rc.textContent=color.toUpperCase();rc.className='sl-val '+cls;
+  document.getElementById('timerVal').className='tz-val '+cls;
+  document.getElementById('timerFill').className='tz-fill '+cls;
+
+  document.querySelectorAll('.sob').forEach(b=>b.classList.remove('sel'));
+  const btn=document.getElementById({red:'cbR',yellow:'cbY',green:'cbG'}[color]);
+  if(btn)btn.classList.add('sel');
+
+  if(color==='red'){setPed('pedNS','pedNSTxt','walk','Walk');setPed('pedEW','pedEWTxt','walk','Walk');}
+  else{setPed('pedNS','pedNSTxt','wait','Wait');setPed('pedEW','pedEWTxt','wait','Wait');}
+  sig=color;
+}
+
+function setPed(id,txtId,state,label){
+  document.getElementById(id).className='ped-tag '+state;
+  document.getElementById(txtId).textContent=label;
+}
+
+async function manualSet(color){
+  if(mode!=='manual'){
+    const t=document.getElementById('modeTag');
+    t.innerHTML='<div class="phase-tag-dot"></div><span>Switch to Manual!</span>';
+    t.className='phase-tag manual';
+    setTimeout(()=>applyModeUI(mode),1400);return;
+  }
+  setActive(color);stopDispTimer();
+  log('Dashboard → '+color.toUpperCase()+' (manual)',color);
+  await sbPatch({signal:color,updated_at:new Date().toISOString()});
+}
+
+async function setMode(m){
+  mode=m;applyModeUI(m);syncHenshin(m);
+  if(m==='auto')stopDispTimer();
+  log('Mode → '+m.toUpperCase(),'amber');
+  await sbPatch({mode:m});
+}
+
+function applyModeUI(m){
+  const isM=m==='manual';
+  document.getElementById('manBtn').className='mbt'+(isM?' active-manual':'');
+  document.getElementById('autoBtn').className='mbt'+(isM?'':' active-auto');
+  document.getElementById('svMode').textContent=m.toUpperCase();
+  document.getElementById('modeBadge').textContent=m.toUpperCase();
+  document.getElementById('modeBadge').className='cbox-badge '+(isM?'manual':'auto');
+  document.getElementById('hdrModeBadge').textContent=m.toUpperCase();
+  document.getElementById('hdrModeBadge').className='mode-badge '+(isM?'manual':'auto');
+  document.getElementById('rcMode').textContent=m.toUpperCase();
+  document.getElementById('rcMode').className='sl-val '+(isM?'y':'a');
+  ['cbR','cbY','cbG'].forEach(id=>{const b=document.getElementById(id);if(isM)b.classList.remove('dis');else b.classList.add('dis');});
+  document.getElementById('overrideTxt').textContent=isM?'Active':'Manual mode only';
+  const mt=document.getElementById('modeTag');mt.className='phase-tag '+(isM?'manual':'auto');
+  document.getElementById('modeLabelTxt').textContent=isM?'Manual Active':'Auto Cycle';
+}
+
+function stopCycle(){stopDispTimer();log('Cycle stopped','amber');}
+
+function startDispTimer(color,dm){
+  stopDispTimer();if(mode!=='auto')return;
+  dispMax=dm[color]||10;dispLeft=dispMax;refreshTimer();
+  dispTimer=setInterval(()=>{dispLeft=Math.max(0,dispLeft-1);refreshTimer();},1000);
+}
+function stopDispTimer(){
+  if(dispTimer){clearInterval(dispTimer);dispTimer=null;}
+  document.getElementById('timerVal').textContent='--';
+  document.getElementById('timerFill').style.width='100%';
+}
+function refreshTimer(){
+  document.getElementById('timerVal').textContent=dispLeft+'s';
+  document.getElementById('timerFill').style.width=(dispLeft/dispMax*100)+'%';
+}
+
+async function pushDurations(){
+  await sbPatch({dur_red:+document.getElementById('dR').value||30,dur_yellow:+document.getElementById('dY').value||5,dur_green:+document.getElementById('dG').value||25});
+  log('Durations updated','amber');
+}
+
+function handleSnap(d){
+  if(!d)return;
+  const ok=d.esp32_online;
+  document.getElementById('espPill').className='status-chip '+(ok?'ok':'err');
+  document.getElementById('espTxt').textContent=ok?'ESP32 OK':'ESP32 OFF';
+  ['svEsp','rcEsp'].forEach(id=>{const el=document.getElementById(id);el.textContent=ok?'Online':'Offline';el.className=(id==='svEsp'?'si-v ':'sl-val ')+(ok?'g':'r');});
+  const sim=ok?'Hardware':'ESP32 Offline';
+  document.getElementById('svSimMode').textContent=sim;document.getElementById('rcSimMode').textContent=sim;
+  if(d.ip){document.getElementById('svIP').textContent=d.ip;document.getElementById('rcIP').textContent=d.ip;}
+  if(d.uptime!=null){
+    const mm=String(Math.floor(d.uptime/60)).padStart(2,'0'),ss2=String(d.uptime%60).padStart(2,'0'),ut=mm+':'+ss2;
+    document.getElementById('svUptime').textContent=ut;document.getElementById('rcUptime').textContent=ut;
+  }
+  if(d.dur_red!=null)document.getElementById('dR').value=d.dur_red;
+  if(d.dur_yellow!=null)document.getElementById('dY').value=d.dur_yellow;
+  if(d.dur_green!=null)document.getElementById('dG').value=d.dur_green;
+  if(d.mode&&d.mode!==prevMode){prevMode=d.mode;if(d.mode!==mode){mode=d.mode;applyModeUI(mode);syncHenshin(mode);log('Mode synced ← '+mode.toUpperCase(),'amber');}}
+  if(d.signal&&d.signal!==prevSig){
+    const isA=mode==='auto';
+    if(isA&&prevSig!==''){
+      if(d.signal==='red'){cycles++;['svCycles','rcCycles'].forEach(id=>document.getElementById(id).textContent=cycles);}
+      startDispTimer(d.signal,{red:d.dur_red||+document.getElementById('dR').value||30,yellow:d.dur_yellow||+document.getElementById('dY').value||5,green:d.dur_green||+document.getElementById('dG').value||25});
+    }
+    setActive(d.signal);if(!isA)stopDispTimer();
+    log('Signal ← '+d.signal.toUpperCase()+' ('+(isA?'auto/ESP32':'manual')+')',d.signal);prevSig=d.signal;
+  }
+}
+
+(async()=>{
+  const d=await sbGet();const ok=d!==null;
+  document.getElementById('sbPill').className='status-chip '+(ok?'ok':'err');
+  document.getElementById('sbTxt').textContent=ok?'Supabase OK':'Offline';
+  const ct=ok?'Connected':'Disconnected';
+  document.getElementById('svConn').textContent=ct;document.getElementById('svConn').className='si-v '+(ok?'g':'r');
+  document.getElementById('rcConn').textContent=ct;document.getElementById('rcConn').className='sl-val '+(ok?'g':'r');
+  log(ok?'Supabase connected':'Supabase error',ok?'green':'red');
+  if(ok){if(d.mode){mode=d.mode;prevMode=d.mode;applyModeUI(mode);}handleSnap(d);}
+})();
+
+sb.channel('tl_v3').on('postgres_changes',{event:'*',schema:'public',table:'traffic_light',filter:'id=eq.1'},p=>handleSnap(p.new))
+  .subscribe(s=>{if(s==='SUBSCRIBED')log('Realtime channel active','green');});
+
+function log(msg,color){
+  const cc={red:'#ff3b3b',yellow:'#ffc107',green:'#2ecc71',amber:'#ff9500'}[color]||'#444';
+  ['logBody','logBody2'].forEach(id=>{
+    const wrap=document.getElementById(id);if(!wrap)return;
+    const t=new Date().toTimeString().slice(0,8);
+    const el=document.createElement('div');el.className='log-row';
+    el.innerHTML=`<span class="lr-time">${t}</span><div class="lr-bar" style="background:${cc}"></div><span class="lr-msg">${msg}</span>`;
+    wrap.insertBefore(el,wrap.firstChild);if(wrap.children.length>60)wrap.lastChild.remove();
+  });
+}
+
+applyModeUI('auto');
+
+const aH=document.getElementById('audioHenshin'),aO=document.getElementById('audioOOO');
+let musicOn=false;
+function syncHenshin(m){if(m==='auto')aH.play().catch(()=>{});else aH.pause();}
+function toggleMusic(){
+  const btn=document.getElementById('musicPill');
+  if(musicOn){aO.pause();musicOn=false;btn.classList.remove('mus');document.getElementById('musicTxt').textContent='BGM';}
+  else{aO.play().catch(()=>{});musicOn=true;btn.classList.add('mus');document.getElementById('musicTxt').textContent='PLAYING';}
+}
+
+log('Trapik v3 ready','amber');
+log('Connecting to Supabase...','amber');
+</script>
+</body>
+</html>
